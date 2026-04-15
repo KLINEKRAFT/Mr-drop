@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#000000">
+<title>MR. DROP</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    position: fixed;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: none;
+  }
+
+  body {
+    background: #000;
+    font-family: 'IBM Plex Mono', monospace;
+    color: #6ea4c4;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* ---- HUD ---- */
+  #hud {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    padding: max(env(safe-area-inset-top, 8px), 8px) 14px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  #hud::after {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 70px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.85), transparent);
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .hud-block { display: flex; flex-direction: column; gap: 1px; }
+
+  .hud-label {
+    font-size: 8px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #4a7a96;
+  }
+
+  .hud-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: #6ea4c4;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .hud-value.danger { color: #c44a4a; }
+
+  .stats-row { display: flex; gap: 18px; }
+
+  /* ---- HEIGHT BAR ---- */
+  #height-bar {
+    position: fixed;
+    right: 10px;
+    top: 70px;
+    bottom: 70px;
+    width: 2px;
+    background: rgba(110,164,196,0.12);
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  #height-marker {
+    position: absolute;
+    bottom: 0;
+    left: -6px;
+    width: 14px;
+    height: 2px;
+    background: #6ea4c4;
+    transition: bottom 0.08s linear;
+  }
+
+  #height-label {
+    position: absolute;
+    right: 12px;
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: #6ea4c4;
+    white-space: nowrap;
+    transform: translateY(50%);
+    transition: bottom 0.08s linear;
+  }
+
+  /* ---- INSTRUCTIONS ---- */
+  #instructions {
+    position: fixed;
+    bottom: max(env(safe-area-inset-bottom, 14px), 14px);
+    left: 14px; right: 14px;
+    text-align: center;
+    z-index: 10;
+    pointer-events: none;
+    transition: opacity 0.6s;
+  }
+
+  #instructions .line1 {
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #4a7a96;
+    margin-bottom: 3px;
+    line-height: 1.5;
+  }
+
+  #instructions .line2 {
+    font-size: 8px;
+    letter-spacing: 2px;
+    color: #3a5a6a;
+  }
+
+  /* ---- SPLAT TEXT ---- */
+  #splat-text {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    font-size: clamp(28px, 8vw, 52px);
+    font-weight: 600;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    color: #c44a4a;
+    pointer-events: none;
+    z-index: 20;
+    opacity: 0;
+    text-shadow: 0 0 40px rgba(196,74,74,0.5);
+  }
+
+  #splat-text.show {
+    animation: splatIn 0.7s ease-out forwards;
+  }
+
+  @keyframes splatIn {
+    0%   { transform: translate(-50%, -50%) scale(3); opacity: 1; }
+    25%  { transform: translate(-50%, -50%) scale(0.85); opacity: 1; }
+    35%  { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
+    50%  { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+  }
+
+  /* ---- SCANLINES ---- */
+  #scanlines {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.06) 2px,
+      rgba(0,0,0,0.06) 4px
+    );
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  /* ---- RESET BUTTON ---- */
+  #reset-btn {
+    position: fixed;
+    bottom: max(env(safe-area-inset-bottom, 10px), 10px);
+    right: 10px;
+    background: rgba(0,0,0,0.6);
+    border: 1px solid #3a5a6a;
+    color: #4a7a96;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    cursor: pointer;
+    z-index: 10;
+    pointer-events: all;
+    transition: all 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #reset-btn:hover, #reset-btn:active {
+    border-color: #6ea4c4;
+    color: #6ea4c4;
+  }
+
+  /* ---- GRAB ZONE INDICATOR (mobile) ---- */
+  #grab-zone {
+    position: fixed;
+    pointer-events: none;
+    z-index: 11;
+    width: 60px; height: 60px;
+    border: 1px solid rgba(110,164,196,0.4);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  #grab-zone.active {
+    border-color: #6ea4c4;
+    background: rgba(110,164,196,0.08);
+    opacity: 1;
+  }
+
+  /* ---- LOADING ---- */
+  #loading {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    z-index: 200;
+    transition: opacity 0.5s;
+  }
+
+  #loading.done { opacity: 0; pointer-events: none; }
+
+  #loading .title {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: 12px;
+    text-transform: uppercase;
+    color: #6ea4c4;
+    margin-bottom: 20px;
+  }
+
+  #loading .bar-track {
+    width: 160px;
+    height: 2px;
+    background: #1a2a3a;
+  }
+
+  #loading .bar-fill {
+    height: 100%;
+    background: #6ea4c4;
+    width: 0%;
+    transition: width 0.3s;
+  }
+
+  #loading .status {
+    margin-top: 10px;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: #3a5a6a;
+  }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="title">MR. DROP</div>
+  <div class="bar-track"><div class="bar-fill" id="load-bar"></div></div>
+  <div class="status" id="load-status">LOADING MODEL</div>
+</div>
+
+<div id="hud">
+  <div class="stats-row">
+    <div class="hud-block">
+      <span class="hud-label">HEIGHT</span>
+      <span class="hud-value" id="max-height">0m</span>
+    </div>
+    <div class="hud-block">
+      <span class="hud-label">DROPS</span>
+      <span class="hud-value" id="drop-count">0</span>
+    </div>
+    <div class="hud-block">
+      <span class="hud-label">BEST</span>
+      <span class="hud-value" id="best-splat">0</span>
+    </div>
+  </div>
+  <div class="hud-block" style="text-align:right">
+    <span class="hud-label">SPEED</span>
+    <span class="hud-value" id="velocity">0</span>
+  </div>
+</div>
+
+<div id="height-bar">
+  <div id="height-marker"></div>
+  <div id="height-label">0m</div>
+</div>
+
+<div id="instructions">
+  <div class="line1" id="inst-text">DRAG HIM UP HIGH -- THEN LET GO</div>
+  <div class="line2" id="inst-sub">PINCH TO ZOOM -- TWO FINGERS TO ORBIT</div>
+</div>
+
+<div id="splat-text">SPLAT</div>
+<div id="grab-zone"></div>
+<div id="scanlines"></div>
+<button id="reset-btn">RESET</button>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  // ---- DETECT MOBILE ----
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    || (navigator.maxTouchPoints > 1);
+
+  if (!isMobile) {
+    document.getElementById('inst-sub').textContent = 'SCROLL TO ZOOM -- RIGHT-CLICK TO ORBIT';
+  }
+
+  // ---- RENDERER ----
+  const renderer = new THREE.WebGLRenderer({ antialias: !isMobile, powerPreference: 'high-performance' });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 2 : 2.5));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = isMobile ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.9;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  document.body.prepend(renderer.domElement);
+
+  // ---- SCENE ----
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x050608);
+  scene.fog = new THREE.FogExp2(0x050608, 0.007);
+
+  // ---- CAMERA ----
+  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 500);
+  camera.position.set(12, 18, 35);
+
+  // ---- ORBIT CONTROLS ----
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 8, 0);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.maxPolarAngle = Math.PI * 0.48;
+  controls.minDistance = 10;
+  controls.maxDistance = 80;
+  controls.enablePan = false;
+
+  // Desktop: right-click orbit, scroll zoom, left-click reserved for drag
+  // Mobile: orbit/zoom handled manually via two-finger gestures
+  if (isMobile) {
+    controls.enabled = false; // we manage touch ourselves
+  } else {
+    controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+  }
+  controls.update();
+
+  // ---- LIGHTING ----
+  scene.add(new THREE.AmbientLight(0x2a3a4a, 0.6));
+
+  const dirLight = new THREE.DirectionalLight(0x6ea4c4, 1.2);
+  dirLight.position.set(20, 50, 30);
+  dirLight.castShadow = true;
+  const s = isMobile ? 1024 : 2048;
+  dirLight.shadow.mapSize.set(s, s);
+  dirLight.shadow.camera.left = -60;
+  dirLight.shadow.camera.right = 60;
+  dirLight.shadow.camera.top = 80;
+  dirLight.shadow.camera.bottom = -10;
+  dirLight.shadow.camera.far = 150;
+  dirLight.shadow.bias = -0.001;
+  scene.add(dirLight);
+
+  scene.add(new THREE.DirectionalLight(0xc44a4a, 0.25).translateX(-20).translateY(30).translateZ(-20));
+  const pLight = new THREE.PointLight(0x6ea4c4, 0.4, 60);
+  pLight.position.set(0, 40, 10);
+  scene.add(pLight);
+
+  // ---- GROUND ----
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(200, 200),
+    new THREE.MeshStandardMaterial({ color: 0x0a0c10, roughness: 0.9, metalness: 0.1 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+  scene.add(new THREE.GridHelper(200, 80, 0x1a2a3a, 0x0d1520));
+
+  // ---- BUILDINGS ----
+  const buildings = [];
+  const bMat = new THREE.MeshStandardMaterial({ color: 0x12161c, roughness: 0.8, metalness: 0.3 });
+  const eMat = new THREE.LineBasicMaterial({ color: 0x1e2a36 });
+
+  function addBuilding(x, z, w, d, h) {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const mesh = new THREE.Mesh(geo, bMat.clone());
+    mesh.position.set(x, h / 2, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), eMat));
+
+    // Accent strip at top
+    const ag = new THREE.BoxGeometry(w + 0.1, 0.12, d + 0.1);
+    const am = new THREE.MeshStandardMaterial({ color: 0x6ea4c4, emissive: 0x6ea4c4, emissiveIntensity: 0.3 });
+    const a = new THREE.Mesh(ag, am);
+    a.position.y = h / 2;
+    mesh.add(a);
+
+    // Simple windows (fewer on mobile)
+    const rowStep = isMobile ? 4 : 2.5;
+    const colStep = isMobile ? 3 : 2;
+    const rows = Math.floor(h / rowStep);
+    const cols = Math.floor(w / colStep);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (Math.random() > 0.45) {
+          const lit = Math.random() > 0.55;
+          const wm = new THREE.MeshStandardMaterial({
+            color: lit ? 0x6ea4c4 : 0x1a2030,
+            emissive: lit ? 0x6ea4c4 : 0x000000,
+            emissiveIntensity: lit ? 0.15 : 0,
+            side: THREE.DoubleSide
+          });
+          const wg = new THREE.PlaneGeometry(0.5, 0.8);
+          const win = new THREE.Mesh(wg, wm);
+          win.position.set(-w/2 + 1 + c * colStep, -h/2 + 1.5 + r * rowStep, d/2 + 0.02);
+          mesh.add(win);
+          const win2 = win.clone();
+          win2.position.z = -(d/2 + 0.02);
+          mesh.add(win2);
+        }
+      }
+    }
+
+    scene.add(mesh);
+    buildings.push({ mesh, minX: x-w/2, maxX: x+w/2, minZ: z-d/2, maxZ: z+d/2, top: h });
+  }
+
+  // Skyline
+  addBuilding(0, 0, 6, 6, 8);
+  addBuilding(-12, -5, 5, 5, 22);
+  addBuilding(10, -8, 7, 6, 35);
+  addBuilding(-8, 8, 4, 4, 15);
+  addBuilding(14, 6, 5, 5, 28);
+  addBuilding(-20, -12, 6, 8, 45);
+  addBuilding(22, -3, 4, 4, 18);
+  addBuilding(-5, -16, 8, 5, 12);
+  addBuilding(6, 15, 5, 6, 40);
+  addBuilding(-18, 10, 6, 4, 30);
+  addBuilding(25, 12, 5, 5, 55);
+  addBuilding(-25, 0, 4, 4, 38);
+  addBuilding(0, -20, 7, 7, 25);
+  addBuilding(18, -16, 5, 5, 20);
+  addBuilding(-14, -20, 4, 6, 50);
+  addBuilding(30, -12, 6, 6, 65);
+
+  // Antenna on tallest building
+  const ant = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.25, 25, 6),
+    new THREE.MeshStandardMaterial({ color: 0x1a2a3a, metalness: 0.8, roughness: 0.2 })
+  );
+  ant.position.set(30, 65 + 12.5, -12);
+  ant.castShadow = true;
+  scene.add(ant);
+
+  const blinkMat = new THREE.MeshStandardMaterial({ color: 0xc44a4a, emissive: 0xc44a4a, emissiveIntensity: 1 });
+  const blinkLight = new THREE.Mesh(new THREE.SphereGeometry(0.25, 6, 6), blinkMat);
+  blinkLight.position.set(30, 65 + 25, -12);
+  scene.add(blinkLight);
+
+  // ---- CHARACTER LOADING ----
+  const loader = new THREE.GLTFLoader();
+  let character = null;
+  let mixer = null;
+  let walkAction = null;
+  let runAction = null;
+  let activeAction = null;
+  let ready = false;
+
+  let loadProgress = 0;
+  const loadBar = document.getElementById('load-bar');
+  const loadStatus = document.getElementById('load-status');
+  const loadScreen = document.getElementById('loading');
+
+  function setLoad(pct, msg) {
+    loadProgress = pct;
+    loadBar.style.width = pct + '%';
+    if (msg) loadStatus.textContent = msg;
+  }
+
+  loader.load('walking.glb',
+    (gltf) => {
+      character = gltf.scene;
+      character.scale.set(1.5, 1.5, 1.5);
+      character.position.set(0, 0, 0);
+      character.traverse(ch => {
+        if (ch.isMesh) { ch.castShadow = true; ch.receiveShadow = true; }
+      });
+      scene.add(character);
+
+      mixer = new THREE.AnimationMixer(character);
+      if (gltf.animations.length > 0) {
+        walkAction = mixer.clipAction(gltf.animations[0]);
+        walkAction.play();
+        activeAction = walkAction;
+      }
+
+      setLoad(70, 'LOADING ANIMATIONS');
+
+      loader.load('running.glb',
+        (rGltf) => {
+          if (rGltf.animations.length > 0) {
+            runAction = mixer.clipAction(rGltf.animations[0]);
+          }
+          setLoad(100, 'READY');
+          setTimeout(() => { loadScreen.classList.add('done'); }, 300);
+          ready = true;
+          pos.copy(character.position);
+        },
+        (p) => setLoad(70 + (p.loaded / (p.total || 1)) * 30, 'LOADING ANIMATIONS'),
+        () => { setLoad(100, 'READY'); loadScreen.classList.add('done'); ready = true; pos.copy(character.position); }
+      );
+    },
+    (p) => setLoad((p.loaded / (p.total || 1)) * 70, 'LOADING MODEL'),
+    (err) => { console.error(err); setLoad(0, 'LOAD ERROR'); }
+  );
+
+  // ---- PHYSICS STATE ----
+  const pos = new THREE.Vector3(0, 0, 0);
+  const vel = new THREE.Vector3(0, 0, 0);
+  let dragging = false;
+  let falling = false;
+  let grounded = true;
+  let dropHeight = 0;
+  let spinAngle = 0;
+
+  const GRAVITY = -28;
+  const BOUNCE = 0.35;
+  const AIR_DRAG = 0.985;
+
+  // Stats
+  let drops = 0;
+  let bestSplat = 0;
+  let maxH = 0;
+
+  // ---- RAYCASTING & DRAG ----
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  const dragPlane = new THREE.Plane();
+  const hitPoint = new THREE.Vector3();
+  const prevHitPoint = new THREE.Vector3();
+  const throwVel = new THREE.Vector3();
+  const grabZone = document.getElementById('grab-zone');
+
+  function screenToNDC(sx, sy) {
+    mouse.x = (sx / window.innerWidth) * 2 - 1;
+    mouse.y = -(sy / window.innerHeight) * 2 + 1;
+  }
+
+  function testCharacterHit(sx, sy) {
+    if (!character) return false;
+    screenToNDC(sx, sy);
+    raycaster.setFromCamera(mouse, camera);
+    // Use a slightly expanded bounding box for easier grabbing on mobile
+    const hits = raycaster.intersectObject(character, true);
+    if (hits.length > 0) return true;
+
+    // Also test a generous sphere around character position for mobile
+    if (isMobile) {
+      const charScreen = pos.clone().project(camera);
+      const cx = (charScreen.x + 1) / 2 * window.innerWidth;
+      const cy = (-charScreen.y + 1) / 2 * window.innerHeight;
+      const dist = Math.hypot(sx - cx, sy - cy);
+      return dist < 50; // 50px grab radius on mobile
+    }
+    return false;
+  }
+
+  function updateDragPlane() {
+    const camDir = camera.getWorldDirection(new THREE.Vector3()).negate();
+    dragPlane.setFromNormalAndCoplanarPoint(camDir, pos);
+  }
+
+  function startDrag(sx, sy) {
+    if (!ready) return false;
+    if (!testCharacterHit(sx, sy)) return false;
+
+    dragging = true;
+    falling = false;
+    grounded = false;
+    vel.set(0, 0, 0);
+    throwVel.set(0, 0, 0);
+    updateDragPlane();
+
+    screenToNDC(sx, sy);
+    raycaster.setFromCamera(mouse, camera);
+    raycaster.ray.intersectPlane(dragPlane, prevHitPoint);
+
+    document.getElementById('instructions').style.opacity = '0';
+    return true;
+  }
+
+  function updateDrag(sx, sy) {
+    if (!dragging) return;
+    screenToNDC(sx, sy);
+    raycaster.setFromCamera(mouse, camera);
+
+    updateDragPlane();
+    if (raycaster.ray.intersectPlane(dragPlane, hitPoint)) {
+      const delta = hitPoint.clone().sub(prevHitPoint);
+      // Smooth follow
+      const lerp = 0.45;
+      pos.x += delta.x * lerp;
+      pos.y += delta.y * lerp;
+      pos.z += delta.z * lerp;
+      pos.y = Math.max(0, pos.y);
+      pos.x = THREE.MathUtils.clamp(pos.x, -50, 50);
+      pos.z = THREE.MathUtils.clamp(pos.z, -50, 50);
+
+      throwVel.copy(delta).multiplyScalar(8);
+      prevHitPoint.copy(hitPoint);
+    }
+  }
+
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+
+    dropHeight = pos.y;
+    if (dropHeight > 1.5) {
+      falling = true;
+      grounded = false;
+      vel.copy(throwVel);
+      vel.y = Math.min(vel.y, 5);
+      drops++;
+      document.getElementById('drop-count').textContent = drops;
+    } else {
+      grounded = true;
+      pos.y = 0;
+    }
+  }
+
+  // ---- TOUCH HANDLING (mobile) ----
+  let touchId = null;       // finger that is dragging the character
+  let orbitTouches = [];     // for two-finger orbit/zoom
+
+  // Track previous two-finger state for orbit/zoom
+  let prevPinchDist = 0;
+  let prevPinchAngle = 0;
+  let prevPinchCenter = { x: 0, y: 0 };
+
+  renderer.domElement.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touches = e.touches;
+
+    // If two fingers: orbit/zoom mode
+    if (touches.length >= 2) {
+      // Cancel any drag
+      if (dragging) endDrag();
+      touchId = null;
+      orbitTouches = [
+        { x: touches[0].clientX, y: touches[0].clientY },
+        { x: touches[1].clientX, y: touches[1].clientY }
+      ];
+      prevPinchDist = Math.hypot(orbitTouches[1].x - orbitTouches[0].x, orbitTouches[1].y - orbitTouches[0].y);
+      prevPinchAngle = Math.atan2(orbitTouches[1].y - orbitTouches[0].y, orbitTouches[1].x - orbitTouches[0].x);
+      prevPinchCenter = {
+        x: (orbitTouches[0].x + orbitTouches[1].x) / 2,
+        y: (orbitTouches[0].y + orbitTouches[1].y) / 2
+      };
+      return;
+    }
+
+    // Single finger: try to grab character
+    if (touches.length === 1 && touchId === null) {
+      const t = touches[0];
+      if (startDrag(t.clientX, t.clientY)) {
+        touchId = t.identifier;
+        grabZone.style.left = t.clientX + 'px';
+        grabZone.style.top = t.clientY + 'px';
+        grabZone.classList.add('active');
+      }
+    }
+  }, { passive: false });
+
+  renderer.domElement.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const touches = e.touches;
+
+    // Two-finger orbit/zoom
+    if (touches.length >= 2) {
+      const t0 = { x: touches[0].clientX, y: touches[0].clientY };
+      const t1 = { x: touches[1].clientX, y: touches[1].clientY };
+      const dist = Math.hypot(t1.x - t0.x, t1.y - t0.y);
+      const center = { x: (t0.x + t1.x) / 2, y: (t0.y + t1.y) / 2 };
+
+      // Zoom
+      if (prevPinchDist > 0) {
+        const scale = prevPinchDist / dist;
+        const newDist = camera.position.distanceTo(controls.target) * scale;
+        const clamped = THREE.MathUtils.clamp(newDist, 10, 80);
+        const dir = camera.position.clone().sub(controls.target).normalize();
+        camera.position.copy(controls.target).add(dir.multiplyScalar(clamped));
+      }
+
+      // Orbit (horizontal swipe of pinch center)
+      const dx = center.x - prevPinchCenter.x;
+      const dy = center.y - prevPinchCenter.y;
+      const orbitSpeed = 0.005;
+
+      // Horizontal orbit
+      const spherical = new THREE.Spherical().setFromVector3(
+        camera.position.clone().sub(controls.target)
+      );
+      spherical.theta -= dx * orbitSpeed;
+      spherical.phi -= dy * orbitSpeed;
+      spherical.phi = THREE.MathUtils.clamp(spherical.phi, 0.1, Math.PI * 0.48);
+      camera.position.copy(controls.target).add(
+        new THREE.Vector3().setFromSpherical(spherical)
+      );
+      camera.lookAt(controls.target);
+
+      prevPinchDist = dist;
+      prevPinchCenter = center;
+      return;
+    }
+
+    // Single finger drag
+    if (touchId !== null) {
+      for (let i = 0; i < touches.length; i++) {
+        if (touches[i].identifier === touchId) {
+          updateDrag(touches[i].clientX, touches[i].clientY);
+          grabZone.style.left = touches[i].clientX + 'px';
+          grabZone.style.top = touches[i].clientY + 'px';
+          break;
+        }
+      }
+    }
+  }, { passive: false });
+
+  renderer.domElement.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    // Check if our drag finger lifted
+    if (touchId !== null) {
+      let found = false;
+      for (let i = 0; i < e.touches.length; i++) {
+        if (e.touches[i].identifier === touchId) { found = true; break; }
+      }
+      if (!found) {
+        endDrag();
+        touchId = null;
+        grabZone.classList.remove('active');
+      }
+    }
+    if (e.touches.length < 2) {
+      prevPinchDist = 0;
+      orbitTouches = [];
+    }
+  }, { passive: false });
+
+  // ---- MOUSE HANDLING (desktop) ----
+  renderer.domElement.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    if (startDrag(e.clientX, e.clientY)) {
+      renderer.domElement.style.cursor = 'grabbing';
+    }
+  });
+
+  renderer.domElement.addEventListener('mousemove', (e) => {
+    if (dragging) {
+      updateDrag(e.clientX, e.clientY);
+    } else if (ready) {
+      renderer.domElement.style.cursor = testCharacterHit(e.clientX, e.clientY) ? 'grab' : 'crosshair';
+    }
+  });
+
+  renderer.domElement.addEventListener('mouseup', () => {
+    endDrag();
+    renderer.domElement.style.cursor = 'crosshair';
+  });
+
+  renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // ---- SPLAT EFFECTS ----
+  const particles = [];
+
+  function splat(position, intensity) {
+    const n = Math.min(isMobile ? 15 : 30, Math.floor(intensity * 2.5));
+    for (let i = 0; i < n; i++) {
+      const geo = new THREE.SphereGeometry(0.08 + Math.random() * 0.15, 4, 4);
+      const mat = new THREE.MeshStandardMaterial({
+        color: Math.random() > 0.5 ? 0x6ea4c4 : 0xc44a4a,
+        emissive: Math.random() > 0.5 ? 0x6ea4c4 : 0xc44a4a,
+        emissiveIntensity: 0.4,
+        transparent: true
+      });
+      const p = new THREE.Mesh(geo, mat);
+      p.position.copy(position);
+      const a = Math.random() * Math.PI * 2;
+      const spd = 2 + Math.random() * intensity * 0.4;
+      p.userData = {
+        vx: Math.cos(a) * spd * (0.5 + Math.random()),
+        vy: 1.5 + Math.random() * spd * 0.4,
+        vz: Math.sin(a) * spd * (0.5 + Math.random()),
+        life: 1
+      };
+      scene.add(p);
+      particles.push(p);
+    }
+
+    // Shockwave ring
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.1, 0.3, 24),
+      new THREE.MeshStandardMaterial({
+        color: 0xc44a4a, emissive: 0xc44a4a, emissiveIntensity: 0.8,
+        side: THREE.DoubleSide, transparent: true
+      })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.copy(position);
+    ring.position.y = 0.03;
+    ring.userData = { vx:0, vy:0, vz:0, life: 1, isRing: true, scale: 1 };
+    scene.add(ring);
+    particles.push(ring);
+  }
+
+  function showSplatText(impact) {
+    const el = document.getElementById('splat-text');
+    if (impact > 18) el.textContent = 'OBLITERATED';
+    else if (impact > 13) el.textContent = ['SPLAT','CRUNCH','WHAM'][Math.floor(Math.random()*3)];
+    else if (impact > 8) el.textContent = ['THUD','BONK','OOF'][Math.floor(Math.random()*3)];
+    else return;
+    el.classList.remove('show');
+    void el.offsetWidth;
+    el.classList.add('show');
+  }
+
+  // ---- COLLISION ----
+  function getFloor(p) {
+    for (const b of buildings) {
+      if (p.x >= b.minX && p.x <= b.maxX && p.z >= b.minZ && p.z <= b.maxZ && p.y <= b.top && p.y >= 0) {
+        return b.top;
+      }
+    }
+    return 0;
+  }
+
+  // ---- RESET ----
+  document.getElementById('reset-btn').addEventListener('click', () => {
+    pos.set(0, 0, 0);
+    vel.set(0, 0, 0);
+    falling = false;
+    grounded = true;
+    dragging = false;
+    touchId = null;
+    spinAngle = 0;
+    if (character) character.rotation.set(0, 0, 0);
+    grabZone.classList.remove('active');
+  });
+
+  // ---- HUD ----
+  const elMaxH = document.getElementById('max-height');
+  const elVel = document.getElementById('velocity');
+  const elHMarker = document.getElementById('height-marker');
+  const elHLabel = document.getElementById('height-label');
+  const elBest = document.getElementById('best-splat');
+
+  function updateHUD() {
+    const h = Math.max(0, pos.y);
+    const pct = Math.min(h / 90, 1) * 100;
+    elHMarker.style.bottom = pct + '%';
+    elHLabel.style.bottom = pct + '%';
+    elHLabel.textContent = Math.floor(h) + 'm';
+
+    if (h > maxH) {
+      maxH = h;
+      elMaxH.textContent = Math.floor(maxH) + 'm';
+    }
+
+    const spd = vel.length();
+    elVel.textContent = Math.floor(spd);
+    elVel.className = 'hud-value' + (spd > 20 ? ' danger' : '');
+  }
+
+  // ---- GAME LOOP ----
+  const clock = new THREE.Clock();
+  let shakeX = 0, shakeY = 0;
+
+  function tick() {
+    requestAnimationFrame(tick);
+    const dt = Math.min(clock.getDelta(), 0.04);
+
+    // Blink
+    blinkMat.emissiveIntensity = Math.sin(Date.now() * 0.003) > 0 ? 1 : 0.08;
+
+    if (ready && character) {
+      // ---- FALLING PHYSICS ----
+      if (falling && !dragging) {
+        vel.y += GRAVITY * dt;
+        vel.x *= AIR_DRAG;
+        vel.z *= AIR_DRAG;
+
+        pos.x += vel.x * dt;
+        pos.y += vel.y * dt;
+        pos.z += vel.z * dt;
+
+        // Tumble
+        spinAngle += dt * Math.min(vel.length() * 0.25, 10);
+        character.rotation.x = Math.sin(spinAngle) * 0.6;
+        character.rotation.z = Math.cos(spinAngle * 0.7) * 0.4;
+
+        // Floor check
+        const floor = getFloor(pos);
+        if (pos.y <= floor) {
+          pos.y = floor;
+          const impact = Math.abs(vel.y);
+
+          if (impact > 2.5) {
+            vel.y = -vel.y * BOUNCE;
+            vel.x *= 0.65;
+            vel.z *= 0.65;
+
+            splat(pos.clone(), impact);
+            showSplatText(impact);
+
+            // Camera shake
+            const amt = Math.min(impact * 0.015, 0.4);
+            shakeX = (Math.random() - 0.5) * amt;
+            shakeY = (Math.random() - 0.5) * amt;
+
+            const score = Math.floor(impact * (dropHeight / 4));
+            if (score > bestSplat) {
+              bestSplat = score;
+              elBest.textContent = bestSplat;
+            }
+          } else {
+            vel.set(0, 0, 0);
+            falling = false;
+            grounded = true;
+            character.rotation.x = 0;
+            character.rotation.z = 0;
+            spinAngle = 0;
+          }
+        }
+      }
+
+      character.position.copy(pos);
+
+      // Animation
+      if (mixer) {
+        if (dragging && runAction && activeAction !== runAction) {
+          if (activeAction) activeAction.fadeOut(0.2);
+          runAction.reset().fadeIn(0.2).play();
+          activeAction = runAction;
+        } else if (grounded && !dragging && walkAction && activeAction !== walkAction) {
+          if (activeAction) activeAction.fadeOut(0.3);
+          walkAction.reset().fadeIn(0.3).play();
+          activeAction = walkAction;
+        }
+        mixer.timeScale = falling ? 0.2 : 1;
+        mixer.update(dt);
+      }
+
+      // Auto-follow camera target toward character when high
+      if (pos.y > 15) {
+        controls.target.y += (pos.y * 0.6 - controls.target.y) * 0.03;
+      } else {
+        controls.target.y += (8 - controls.target.y) * 0.03;
+      }
+    }
+
+    // Update particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      const d = p.userData;
+      d.life -= dt * 1.8;
+      if (d.life <= 0) {
+        scene.remove(p);
+        if (p.geometry) p.geometry.dispose();
+        if (p.material) p.material.dispose();
+        particles.splice(i, 1);
+        continue;
+      }
+      if (d.isRing) {
+        d.scale += dt * 18;
+        p.scale.setScalar(d.scale);
+        p.material.opacity = d.life * 0.7;
+      } else {
+        d.vy += GRAVITY * 0.3 * dt;
+        p.position.x += d.vx * dt;
+        p.position.y += d.vy * dt;
+        p.position.z += d.vz * dt;
+        if (p.position.y < 0) p.position.y = 0;
+        p.material.opacity = d.life;
+        p.scale.setScalar(d.life);
+      }
+    }
+
+    // Camera shake decay
+    shakeX *= 0.85;
+    shakeY *= 0.85;
+    camera.position.x += shakeX;
+    camera.position.y += shakeY;
+
+    updateHUD();
+    if (!isMobile) controls.update();
+    renderer.render(scene, camera);
+  }
+
+  tick();
+
+  // ---- RESIZE ----
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+})();
+</script>
+</body>
+</html>
